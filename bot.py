@@ -20,6 +20,7 @@ players_in_games = {}
 # Функция для обработки команды /start
 @bot.message_handler(commands=['start'])
 def start(message):
+    # Главное меню
     buttons = types.InlineKeyboardMarkup(row_width=2)
     button1 = types.InlineKeyboardButton('Новая игра', callback_data='new_game')
     button2 = types.InlineKeyboardButton('Присоединиться', callback_data='join_game')
@@ -56,8 +57,17 @@ def callback(call):
         elif call.data == 'help':
             welcome_help(call.message)
         elif call.data.startswith('№'):
+            bot.answer_callback_query(callback_query_id=call.id, show_alert=True, text=f"Вы выбрали фото {call.data}!")
             round_card(call)
 
+
+# Функция для обработки ввода сообщений
+@bot.message_handler(content_types=['text'])
+def func(message):
+    if message.text == "Старт игры":
+        start_game(message)
+    if message.text == "Меню":
+        start(message)
 
 
 # Функция для создания новой игровой комнаты
@@ -66,7 +76,7 @@ def new_game(message):
     # Создаем новую игровую комнату
     room_id = message
     rooms[room_id] = {
-        'card_all': [int(i) for i in range(1, 85)],
+        'card_all': [int(i) for i in range(1, 477)],
         'card_users': [],
         'card_round': [],
         'players': {message: []}
@@ -74,29 +84,15 @@ def new_game(message):
     # Добавляем игрока в список игроков сервера
     players_in_games[message] = room_id
     # Отправляем сообщение с информацией о комнате
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    bot.send_message(message, f'Новая игра создана!\nПригласите других игроков в эту игровую комнату. Код комнаты: {room_id}.\nКогда вся компания будет готова запустите игру командой "Старт игры"')
+    # Кнопки меню и старта игры
+    markup = types.ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
     btn1 = types.KeyboardButton("Старт игры")
-    markup.add(btn1)
+    btn2 = types.KeyboardButton("Меню")
+    markup.add(btn1, btn2)
     bot.send_message(message,
-                     text=f'Новая игра создана!\nПригласите других игроков в эту игровую комнату. Код комнаты: {room_id}.\nКогда вся компания будет готова запустите игру командой "Старт игры"',
+                     text=f'Кнопка "Старт игры" запускает игру и новые раунды.\nКнопка "Меню" для вызова главного меню, также как и команда /start',
                      reply_markup=markup)
-
-
-@bot.message_handler(content_types=['text'])
-def func(message):
-    if message.text == "Старт игры":
-        start_game(message)
-    #     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    #     btn1 = types.KeyboardButton("Обновить карточки")
-    #     btn2 = types.KeyboardButton("Завершить игру")
-    #     markup.add(btn1, btn2)
-    #     bot.send_message(message.chat.id, text="Вы ведущий и у Вас есть кнопки для", reply_markup=markup)
-    #
-    # elif message.text == "Обновить карточки":
-    #     update_cards(message.from_user.id)
-    #
-    # elif message.text == "Завершить игру":
-    #     end_game(message.from_user.id)
 
 
 # Функция для присоединения к игровой комнате
@@ -106,12 +102,28 @@ def join_game(message):
     # Проверяем, существует ли комната
     if room_id in rooms:
         if message.from_user.id not in rooms[room_id]['players']:
-            # Добавляем игрока в комнату
-            rooms[room_id]['players'][message.from_user.id] = []
-            # Добавляем игрока в список игроков сервера
-            players_in_games[message] = [room_id]
-            # Отправляем сообщение с информацией о комнате
-            bot.send_message(message.chat.id, f'Вы присоединились к игровой комнате. Код комнаты: {str(room_id)}.\nОжидайте начала игры')
+            # Проверяем, не начилась ли уже игра
+            len_card_users = [len(rooms[room_id]['players'][player]) for player in rooms[room_id]['players']]
+            if all([i == 0 for i in len_card_users]):
+                # Отправляем игрокам комнаты уведомление, что к нам присоединился новый игрок
+                for player in rooms[room_id]['players']:
+                    bot.send_message(player, f'К нам присоединился новый игрок @{message.from_user.username}.')
+                # Добавляем игрока в комнату
+                rooms[room_id]['players'][message.from_user.id] = []
+                # Добавляем игрока в список игроков сервера
+                players_in_games[message.from_user.id] = room_id
+                # Отправляем сообщение с информацией о комнате
+                bot.send_message(message.chat.id, f'Вы присоединились к игровой комнате. Код комнаты: {str(room_id)}.\nОжидайте начала игры')
+                # Кнопки меню и старта игры
+                markup = types.ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
+                btn1 = types.KeyboardButton("Старт игры")
+                btn2 = types.KeyboardButton("Меню")
+                markup.add(btn1, btn2)
+                bot.send_message(message.chat.id,
+                                 text=f'Кнопка "Старт игры" запускает игру и новые раунды.\nКнопка "Меню" для вызова главного меню, также как и команда /start',
+                                 reply_markup=markup)
+            else:
+                bot.send_message(message.chat.id, f'Игра уже началась и войти не получится!\nПересоздайте игру или поищите другую комнату. /start')
         else:
             # Если игрок повторно пытается присоединиться к комнате
             bot.send_message(message.chat.id, f'Вы уже в игре!')
@@ -120,7 +132,7 @@ def join_game(message):
         bot.send_message(message.chat.id, 'Комната не найдена!')
 
 
-# Обработчик команды /exitgame
+# Обработчик команды выхода из комнаты/exitgame
 @bot.message_handler(commands=['exitgame'])
 def exit_game(message):
     # Получаем идентификатор игрока
@@ -130,8 +142,15 @@ def exit_game(message):
         bot.send_message(player_id, f'Вы хотите выйти из своей игры?\nДля выхода и завершения вашей игры нажмите соответствующую кнопку /start')
     elif player_id in players_in_games:
         room_id = players_in_games[player_id]
-        del rooms['players'][player_id]
+        # Пополняем основной список карт освободившимися карточками
+        for card in rooms[room_id][player_id]:
+            rooms[room_id]['card_all'].append(card)
+            rooms[room_id]['card_users'].remove(card)
+        del rooms[room_id]['players'][player_id]
         del players_in_games[player_id]
+        # Отправляем игрокам комнаты уведомление, что к нам присоединился новый игрок
+        for player in rooms[players_in_games[player_id]]['players']:
+            bot.send_message(player, f'@{message.from_user.username} вышел из игры.')
         # Отправляем сообщение с подтверждением
         bot.send_message(message, f'Вы вышли из игровой конматы {str(room_id)}!\nСоздайте новую или присоединитесь к своим друзьям! /start')
     else:
@@ -139,7 +158,7 @@ def exit_game(message):
         bot.send_message(message, 'Вы нигде не играете.')
 
 
-# Обработчик команды /endgame
+# Обработчик команды завершения игры и закрытия комнаты /endgame
 @bot.message_handler(commands=['endgame'])
 def end_game(message):
     # Получаем идентификатор игры
@@ -152,11 +171,10 @@ def end_game(message):
         bot.send_message(message, f'Игра {str(room_id)} завершена!\nСоздайте новую или присоединитесь к своим друзьям! /start')
     else:
         # Отправляем сообщение с ошибкой
-        bot.send_message(message, 'Вы ещё не создавали или уже завершили свою игру.')
+        bot.send_message(message, 'Вы пытаетесь завершить не свою игру, ещё не создавали или уже завершили свою игру.')
 
 
 # Функция для начала игры
-# @bot.message_handler(commands=['startgame'])
 def start_game(message):
     if message.from_user.id not in players_in_games:
         bot.send_message(message.chat.id, text='Вы ещё не присоединились ни к одной из игр /start')
@@ -167,32 +185,36 @@ def start_game(message):
         if room_id in rooms:
             # Получаем список игроков
             players = rooms[room_id]['players']
-            # Отправляем игрокам 6 карточек с изображениями
-            for player in players:
-                if not rooms[room_id]['players'][player]:
-                    bot.send_message(player, 'Начинаем игру! Вам отправлены 6 карточек.')
-                    # Формируем набор карточек для нового игрока и отправлем их
-                    for i in range(6):
-                        # Генерируем случайное изображение из основного списка карточек
-                        card = random.choice(rooms[room_id]['card_all'])
-                        # Удаляем выбранное изображение из основного списка карточек
-                        rooms[room_id]['card_all'].remove(card)
-                        # Пополняем список карточек пользователей на руках
-                        rooms[room_id]['card_users'].append(card)
-                        # Добавляем карточку в список карточек игрока
-                        rooms[room_id]['players'][player].append(card)
-                        # Отправляем изображение игроку
-                        bot.send_photo(player, open(f'img/{card}.jpg', 'rb'), caption=f'{card}')
-                        # print(rooms[room_id]['card_all'])
-                        # print(rooms[room_id]['card_use'])
-                        # print(rooms[room_id]['players'])
-                    buttons = types.InlineKeyboardMarkup(row_width=3)
-                    for i in rooms[room_id]['players'][player]:
-                        buttons.add(types.InlineKeyboardButton(f'{i}', callback_data=f'№ {i}'))
-                    bot.send_message(player,
-                                     text=f'Ведущий загадывает карточку и называет ассоциацию.\nКаждый игрок (в том числе и ведущий) должен выбрать карточку в соответсвии с названной ассоциацией.\nВыбранные карточки будут разосланы игрокам рандомным образом, после эти карточки будут заменены на новые',
-                                     reply_markup=buttons)
-                else:
+            # Условие: ни у кого нет карточек (начало игры) или у всех 5, то можно начинать новую раздачу
+            len_card_users = [len(rooms[room_id]['players'][player]) for player in players]
+            if all([i == 0 for i in len_card_users]):
+                # Отправляем игрокам 6 карточек с изображениями
+                for player in players:
+                    if not rooms[room_id]['players'][player]:
+                        bot.send_message(player, 'Начинаем игру! Вам отправлены 6 карточек.')
+                        # Формируем набор карточек для нового игрока и отправлем их
+                        for i in range(6):
+                            # Генерируем случайное изображение из основного списка карточек
+                            card = random.choice(rooms[room_id]['card_all'])
+                            # Удаляем выбранное изображение из основного списка карточек
+                            rooms[room_id]['card_all'].remove(card)
+                            # Пополняем список карточек пользователей на руках
+                            rooms[room_id]['card_users'].append(card)
+                            # Добавляем карточку в список карточек игрока
+                            rooms[room_id]['players'][player].append(card)
+                            # Отправляем изображение игроку
+                            bot.send_photo(player, open(f'img/{card}.jpg', 'rb'), caption=f'{card}')
+                            # print(rooms[room_id]['card_all'])
+                            # print(rooms[room_id]['card_use'])
+                            # print(rooms[room_id]['players'])
+                        buttons = types.InlineKeyboardMarkup(row_width=3)
+                        for i in rooms[room_id]['players'][player]:
+                            buttons.add(types.InlineKeyboardButton(f'{i}', callback_data=f'№ {i}'))
+                        bot.send_message(player,
+                                         text=f'Ведущий загадывает карточку и называет ассоциацию.\nКаждый игрок (в том числе и ведущий) должен выбрать № карточки в соответсвии с названной ассоциацией.\nВыбранные карточки будут разосланы игрокам рандомным образом.\nВыбрать можно и нужно только одну карточку!\nПока все игроки не сделают свой выбор нельзя показывать свой телефон никому!\nКогда Вам придёт новая карточка - значит все игроки сделали выбор.',
+                                         reply_markup=buttons)
+            elif all([i == 5 for i in len_card_users]):
+                for player in players:
                     # Генерируем случайное изображение из основного списка карточек
                     card = random.choice(rooms[room_id]['card_all'])
                     # Удаляем выбранное изображение из основного списка карточек
@@ -201,7 +223,7 @@ def start_game(message):
                     rooms[room_id]['card_users'].append(card)
                     # Добавляем карточку в список карточек игрока
                     rooms[room_id]['players'][player].append(card)
-                    bot.send_message(player, 'Новый раунд! Вам отправлены 6 карточек.')
+                    bot.send_message(player, 'Новый раунд! Вам отправлены 6 карточек (одна из них новая).')
                     # Отправляем игрокам 6 карточек с изображениями а также делаем кнопки
                     buttons = types.InlineKeyboardMarkup(row_width=3)
                     for card in rooms[room_id]['players'][player]:
@@ -211,16 +233,20 @@ def start_game(message):
                     bot.send_message(player,
                                      text=f'Ведущий загадывает карточку и называет ассоциацию.\nКаждый игрок (в том числе и ведущий) должен выбрать карточку в соответсвии с названной ассоциацией.\nВыбранные карточки будут разосланы игрокам рандомным образом, после эти карточки будут заменены на новые',
                                      reply_markup=buttons)
+            else:
+                bot.send_message(message.from_user.id, text='Ещё не все игроки сделали свой выбор, подождите')
         else:
             # Отправляем сообщение об ошибке
             bot.send_message(message.chat.id, 'Комната не найдена!')
 
 
+# Функция отправки сообщений после выбора карт
 def round_card(message):
     if message.from_user.id not in players_in_games:
         bot.send_message(message.from_user.id, text='Вы ещё не присоединились ни к одной из игр /start')
+    elif len(rooms[players_in_games[message.from_user.id]]['players'][message.from_user.id]) == 5:
+        bot.send_message(message.from_user.id, text='Ранее Вы уже сделали свой выбор, ждите!')
     else:
-        # bot.delete_message(call.message.chat.id, call.message.message_id)
         # Получаем код комнаты из сообщения
         room_id = players_in_games[message.from_user.id]
         # Получаем номер выбранной карточки игрока
@@ -233,21 +259,12 @@ def round_card(message):
         # Получаем список игроков
         players = rooms[room_id]['players']
         if len(rooms[room_id]['card_round']) == len(players):
-            # for player in players:
-                # markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-                # for i in player.values():
-                #     btn = types.KeyboardButton(f'/№ {i}')
-                #     markup.add(btn)
-                # bot.send_message(player,
-                #                  text=f'Игроки сделали свой выбор.\nГолосуем!',
-                #                  reply_markup=markup)
-
             # Отправляем игрокам по 1 карточке с изображениями, которые выбирали игроки
             for player in players:
                 # Генерируем случайное изображение из списка карточек раунда
                 card = random.choice(rooms[room_id]['card_round'])
                 # Удаляем выбранное изображение из списка карточек раунда
-                rooms[room_id]['card_round'].remove(card_choice)
+                rooms[room_id]['card_round'].remove(card)
                 # Пополняем основной список карт освободившейся карточкой
                 rooms[room_id]['card_all'].append(card)
                 # Отправляем случайное изображение каждому игроку
@@ -271,13 +288,15 @@ def welcome_help(message):
 Другие игроки подключаются к данной комнате.
 Когда комната будет заполнена главный игрок сможет раздать карты.
 Бот разошлет всем игрокам карточки первой раздачи.
-Ведущий игрок раунда выбирает карточку, говорит игрокам ассоциацию и выкладывает телефон с фото на стол.
-Игроки выбирают свои карточки в соответствии с ассоциацией ведущего и также выкладывают телефоны на стол.
+Ведущий игрок раунда придумывает ассоциацию к одной из 6ти имеющихся у него карточек, говорит игрокам ассоциацию вслух, выбирает в меню бота номер выбранной карты.
+Игроки выбирают свои карточки в соответствии с ассоциацией ведущего и делают выбор номера своей карточки в боте.
+Когда все игроки сделали свой выбор - бот автоматически присылает каждому игроку одну из выбранных всеми игроками карт (карты присылаются рандомно, это может быть как ваша карта, так и чужая).
+Игроки выкладывают телефоны с присланной карточкой на стол.
 Происходит голосование, подсчет очков, ходы по полю.
-С новым раундом бот заменяет использованные карточки.
+Командой "Старт игры" объявляется новый раунд, бот заменяет использованные карточки и присылает новый набор из 6ти карточек каждому игроку.
 
 Для перехода к главному меню всегда используйте команду /start'''
-    message = bot.send_message(message.chat.id, text)
+    bot.send_message(message.chat.id, text)
 
 
 # Запускаем бота
